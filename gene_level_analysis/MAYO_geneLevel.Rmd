@@ -1,10 +1,21 @@
 ---
 title: Covariate and differential expression analysis of MAYO reprocessed counts
-author: Thanneer Perumal
-editor_options:
-  chunk_output_type: console
+output: html_notebook
 ---
 Date of analysis update: "`r date()`"
+
+
+syn5223705.5
+syn8698211.1
+syn3817650.8
+syn8690904.1
+syn6126119.3
+syn8698214.1
+syn8449369.2
+syn6126114.3
+syn6145639.5
+syn8690799.1
+
 
 ```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE, cache=FALSE}
 ## It is assumed your working directory is where this file
@@ -23,11 +34,11 @@ library(RColorBrewer)
 library(cqn)
 library(glmnet)
 
-library(synapseClient)
+library(synapser)
 library(githubr) # get the package from devtools::install_github('brian-bot/githubr')
 library(knitr)
 
-synapseLogin()
+synLogin()
 
 library(doParallel)
 library(foreach)
@@ -51,31 +62,19 @@ knitr::opts_chunk$set(
   cache = TRUE)
 ```
 
-```{r synapse.parameters, include=FALSE}
-# Synapse parameters
-parentId = 'syn8672415'
-activityName = 'Differential Expression Analysis';
-activityDescription = 'Differential expression analysis of reprocessed RNASeq from MAYO samples';
-
-# Github link
-thisFileName <- 'MAYO_geneLevel.Rmd'
-thisRepo <- getRepo(repository = "th1vairam/ampad-DiffExp", ref="branch", refName='geneLevelAnalysis')
-thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('gene_level_analysis/',thisFileName))
-```
-
 ### Data download
 Obtain count matrix and metadata from synapse
 ```{r download.data}
 # Get reprocessed sample counts for temporal cortex
 COUNT_TC_ID <- 'syn8690799';
 ALL_USED_IDs <- COUNT_TC_ID
-COUNT_TC <- synGet(COUNT_TC_ID)@filePath %>%
+COUNT_TC <- synGet(COUNT_TC_ID)$path %>%
   read.table(header=T, sep='\t', check.names = F, row.names = 1)
 
 # Get reprocessed sample counts for cerebellum
 COUNT_CE_ID <- 'syn8690904';
 ALL_USED_IDs[length(ALL_USED_IDs)+1] <- COUNT_CE_ID
-COUNT_CE <- synGet(COUNT_CE_ID)@filePath %>%
+COUNT_CE <- synGet(COUNT_CE_ID)$path %>%
   read.table(header=T, sep='\t', check.names = F, row.names = 1)
 
 # Combine TCX and CBE counts
@@ -91,7 +90,7 @@ rownames(COUNT) = tmp[rownames(COUNT), 'ensembl_gene_id']
 # Get clinical metadata
 METADATA_TC_ID <- 'syn3817650'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_TC_ID
-METADATA_TC <- synGet(METADATA_TC_ID)@filePath %>%
+METADATA_TC <- synGet(METADATA_TC_ID)$path %>%
   read.table(sep=',',header=T, stringsAsFactors=F) %>%
   tidyr::separate(ID, c('Donor_ID', 'Tissue'), sep = '_') %>%
   dplyr::mutate(ID = paste(Donor_ID, Tissue, sep = '_'))
@@ -99,38 +98,39 @@ METADATA_TC <- synGet(METADATA_TC_ID)@filePath %>%
 # Get clinical metadata
 METADATA_CE_ID <- 'syn5223705'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_CE_ID
-METADATA_CE <- synGet(METADATA_CE_ID)@filePath %>%
+METADATA_CE <- synGet(METADATA_CE_ID, version = 5)$path %>%
   read.table(sep=',',header=T, stringsAsFactors=F) %>%
   tidyr::separate(SampleID, c('Donor_ID', 'Tissue')) %>%
   dplyr::mutate(ID = paste(Donor_ID, Tissue, sep = '_')) %>%
   dplyr::rename(Gender = Sex, FLOWCELL = Flowcell)
 
 # Get picard metrics from synapse
-METADATA.PICARD_CE_ID <- 'syn8698214';
-ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA.PICARD_CE_ID
-METADATA.PICARD_CE <- METADATA.PICARD_CE_ID %>%
-  CovariateAnalysis::downloadFile() %>%
+METADATA_PICARD_CE_ID <- 'syn8698214';
+ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_PICARD_CE_ID
+METADATA_PICARD_CE <- synGet(METADATA_PICARD_CE_ID)$path %>%
+  read.table(sep='\t', header=T, stringsAsFactors=F) %>% 
   dplyr::rename(ID = sample)
-colnames(METADATA.PICARD_CE) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA.PICARD_CE))
-colnames(METADATA.PICARD_CE) = gsub('RnaSeqMetrics__','',colnames(METADATA.PICARD_CE))
+colnames(METADATA_PICARD_CE) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA_PICARD_CE))
+colnames(METADATA_PICARD_CE) = gsub('RnaSeqMetrics__','',colnames(METADATA_PICARD_CE))
 
-METADATA.PICARD_TC_ID <- 'syn8698211';
-ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA.PICARD_TC_ID
-METADATA.PICARD_TC <- METADATA.PICARD_TC_ID %>%
-  CovariateAnalysis::downloadFile() %>%
+METADATA_PICARD_TC_ID <- 'syn8698211';
+ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_PICARD_TC_ID
+METADATA_PICARD_TC <- synGet(METADATA_PICARD_TC_ID)$path %>%
+  read.table(sep='\t', header=T, stringsAsFactors=F) %>% 
   dplyr::rename(ID = sample)
-colnames(METADATA.PICARD_TC) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA.PICARD_TC))
-colnames(METADATA.PICARD_TC) = gsub('RnaSeqMetrics__','',colnames(METADATA.PICARD_TC))
+colnames(METADATA_PICARD_TC) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA_PICARD_TC))
+colnames(METADATA_PICARD_TC) = gsub('RnaSeqMetrics__','',colnames(METADATA_PICARD_TC))
 
 # Merge all metadata
 METADATA = list(METADATA_TC, METADATA_CE) %>%
   data.table::rbindlist(use.names = T, fill = T) %>%
-  dplyr::inner_join(list(METADATA.PICARD_TC, METADATA.PICARD_CE) %>%
+  dplyr::inner_join(list(METADATA_PICARD_TC, METADATA_PICARD_CE) %>% 
                       data.table::rbindlist(use.names = T, fill = T)) %>%
   as.data.frame
 
 # Get gene specific parameters from synapse
-GENE.PARAM = downloadFile('syn8449369')
+GENE.PARAM = synGet('syn8449369')$path %>% 
+  read.table(sep = '\t', header = T, stringsAsFactors = F)
 ALL_USED_IDs = c(ALL_USED_IDs, 'syn8449369')
 
 GENE.LEN = dplyr::select(GENE.PARAM, ensembl_gene_id, gene.length) %>% unique()
@@ -140,8 +140,8 @@ GENE.GC = dplyr::select(GENE.PARAM, ensembl_gene_id, percentage_gc_content) %>% 
 rownames(GENE.GC) = GENE.GC$ensembl_gene_id
 
 # Samples excluded by MAYO investigators
-SAMPLES.EXCLUDE = c(downloadFile('syn6126119')$`Sample Name`,
-                    downloadFile('syn6126114')$`Sample Name`)
+SAMPLES.EXCLUDE = c(read.table(synGet('syn6126119', version = 3)$path, sep = '\t', header = T, stringsAsFactors = F)$`Sample Name`,
+                    synGet('syn6126114', version = 3)$`Sample Name`)
 ALL_USED_IDs = c(ALL_USED_IDs, 'syn6126119', 'syn6126114')
 ```
 Following `r length(SAMPLES.EXCLUDE)` samples were removed from analysis as original investigators tagged them as outliers for various reasons as described here syn6126119, syn6126114
@@ -251,7 +251,7 @@ y.predict.all = predict(plr.model, t(x.predict), s = 'lambda.min', type = 'respo
 # Get genes that are predictors of PMI and use them as control probes
 CONTROL.PROBES_ID = 'syn6145639'
 ALL_USED_IDs = c(ALL_USED_IDs, CONTROL.PROBES_ID)
-CONTROL.PROBES = fread(synGet(CONTROL.PROBES_ID)@filePath, data.table = F) %>%
+CONTROL.PROBES = fread(synGet(CONTROL.PROBES_ID)$path, data.table = F) %>%
   dplyr::mutate(ID = x) %>%
   tidyr::separate(ID, c('ensembl_gene_id', 'position'), sep = '\\.')
 
