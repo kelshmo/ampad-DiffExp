@@ -17,29 +17,23 @@ syn6145639.5
 syn8690799.1
 
 
-```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE, cache=FALSE}
-## It is assumed your working directory is where this file
 
+```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE, cache=FALSE}
 ## Load required libraries
 library(CovariateAnalysis) # get the package from devtools::install_github('th1vairam/CovariateAnalysis@dev')
 library(data.table)
 library(plyr)
 library(tidyverse)
 library(psych)
-
 library(limma)
 library(edgeR)
 library(biomaRt)
 library(RColorBrewer)
 library(cqn)
 library(glmnet)
-
 library(synapser)
 library(githubr) # get the package from devtools::install_github('brian-bot/githubr')
 library(knitr)
-
-synLogin()
-
 library(doParallel)
 library(foreach)
 
@@ -62,19 +56,23 @@ knitr::opts_chunk$set(
   cache = TRUE)
 ```
 
+```{r synLogin}
+synLogin()
+```
+
 ### Data download
-Obtain count matrix and metadata from synapse
+Obtain count matrix and metadata from Synapse
 ```{r download.data}
 # Get reprocessed sample counts for temporal cortex
 COUNT_TC_ID <- 'syn8690799';
 ALL_USED_IDs <- COUNT_TC_ID
-COUNT_TC <- synGet(COUNT_TC_ID)$path %>%
+COUNT_TC <- synGet(COUNT_TC_ID, version = 1)$path %>%
   read.table(header=T, sep='\t', check.names = F, row.names = 1)
 
 # Get reprocessed sample counts for cerebellum
 COUNT_CE_ID <- 'syn8690904';
 ALL_USED_IDs[length(ALL_USED_IDs)+1] <- COUNT_CE_ID
-COUNT_CE <- synGet(COUNT_CE_ID)$path %>%
+COUNT_CE <- synGet(COUNT_CE_ID, version = 1)$path %>%
   read.table(header=T, sep='\t', check.names = F, row.names = 1)
 
 # Combine TCX and CBE counts
@@ -90,7 +88,7 @@ rownames(COUNT) = tmp[rownames(COUNT), 'ensembl_gene_id']
 # Get clinical metadata
 METADATA_TC_ID <- 'syn3817650'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_TC_ID
-METADATA_TC <- synGet(METADATA_TC_ID)$path %>%
+METADATA_TC <- synGet(METADATA_TC_ID, version = 8)$path %>%
   read.table(sep=',',header=T, stringsAsFactors=F) %>%
   tidyr::separate(ID, c('Donor_ID', 'Tissue'), sep = '_') %>%
   dplyr::mutate(ID = paste(Donor_ID, Tissue, sep = '_'))
@@ -107,19 +105,19 @@ METADATA_CE <- synGet(METADATA_CE_ID, version = 5)$path %>%
 # Get picard metrics from synapse
 METADATA_PICARD_CE_ID <- 'syn8698214';
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_PICARD_CE_ID
-METADATA_PICARD_CE <- synGet(METADATA_PICARD_CE_ID)$path %>%
+METADATA_PICARD_CE <- synGet(METADATA_PICARD_CE_ID, version = 1)$path %>%
   read.table(sep='\t', header=T, stringsAsFactors=F) %>% 
   dplyr::rename(ID = sample)
-colnames(METADATA_PICARD_CE) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA_PICARD_CE))
-colnames(METADATA_PICARD_CE) = gsub('RnaSeqMetrics__','',colnames(METADATA_PICARD_CE))
+# colnames(METADATA_PICARD_CE) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA_PICARD_CE))
+# colnames(METADATA_PICARD_CE) = gsub('RnaSeqMetrics__','',colnames(METADATA_PICARD_CE))
 
 METADATA_PICARD_TC_ID <- 'syn8698211';
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_PICARD_TC_ID
-METADATA_PICARD_TC <- synGet(METADATA_PICARD_TC_ID)$path %>%
+METADATA_PICARD_TC <- synGet(METADATA_PICARD_TC_ID, version = 1)$path %>%
   read.table(sep='\t', header=T, stringsAsFactors=F) %>% 
   dplyr::rename(ID = sample)
-colnames(METADATA_PICARD_TC) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA_PICARD_TC))
-colnames(METADATA_PICARD_TC) = gsub('RnaSeqMetrics__','',colnames(METADATA_PICARD_TC))
+# colnames(METADATA_PICARD_TC) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA_PICARD_TC))
+# colnames(METADATA_PICARD_TC) = gsub('RnaSeqMetrics__','',colnames(METADATA_PICARD_TC))
 
 # Merge all metadata
 METADATA = list(METADATA_TC, METADATA_CE) %>%
@@ -127,9 +125,12 @@ METADATA = list(METADATA_TC, METADATA_CE) %>%
   dplyr::inner_join(list(METADATA_PICARD_TC, METADATA_PICARD_CE) %>% 
                       data.table::rbindlist(use.names = T, fill = T)) %>%
   as.data.frame
+colnames(METADATA) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA))
+colnames(METADATA) = gsub('RnaSeqMetrics__','',colnames(METADATA))
+#https://www.tidyverse.org/articles/2019/03/tibble-2.1.1/
 
 # Get gene specific parameters from synapse
-GENE.PARAM = synGet('syn8449369')$path %>% 
+GENE.PARAM = synGet('syn8449369', version = 2)$path %>% 
   read.table(sep = '\t', header = T, stringsAsFactors = F)
 ALL_USED_IDs = c(ALL_USED_IDs, 'syn8449369')
 
@@ -140,8 +141,8 @@ GENE.GC = dplyr::select(GENE.PARAM, ensembl_gene_id, percentage_gc_content) %>% 
 rownames(GENE.GC) = GENE.GC$ensembl_gene_id
 
 # Samples excluded by MAYO investigators
-SAMPLES.EXCLUDE = c(read.table(synGet('syn6126119', version = 3)$path, sep = '\t', header = T, stringsAsFactors = F)$`Sample Name`,
-                    synGet('syn6126114', version = 3)$`Sample Name`)
+SAMPLES.EXCLUDE = c(read.table(synGet('syn6126119', version = 3)$path, sep = '\t', header = T, stringsAsFactors = F)$Sample.Name,
+                    read.table(synGet('syn6126114', version = 3)$path, sep = '\t', header = T, stringsAsFactors = F)$Sample.Name)
 ALL_USED_IDs = c(ALL_USED_IDs, 'syn6126119', 'syn6126114')
 ```
 Following `r length(SAMPLES.EXCLUDE)` samples were removed from analysis as original investigators tagged them as outliers for various reasons as described here syn6126119, syn6126114
