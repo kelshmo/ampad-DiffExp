@@ -8,18 +8,19 @@ Date of analysis update: "`r date()`"
 |  -----------------------------------------  |   ---------                      |
 | syn5223705.5 | | 
 | syn8698211.1 | | 
-syn3817650.8
-syn8690904.1
-syn6126119.3
-syn8698214.1
-syn8449369.2
-syn6126114.3
-syn6145639.5
-syn8690799.1
+| syn3817650.8 | | 
+| syn8690904.1 | | 
+| syn6126119.3 | | 
+| syn8698214.1 | | 
+| syn8449369.2 | | 
+| syn6126114.3 | | 
+| syn6145639.5 | | 
+| syn8690799.1 | | 
 
 
 
 ```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE, cache=FALSE}
+##It is assumed your working directory is "~/ampad-DiffExp/gene_level_analysis"
 ## Load required libraries
 library(CovariateAnalysis) # get the package from devtools::install_github('th1vairam/CovariateAnalysis@dev')
 library(data.table)
@@ -129,7 +130,6 @@ METADATA = list(METADATA_TC, METADATA_CE) %>%
   as.data.frame
 colnames(METADATA) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA))
 colnames(METADATA) = gsub('RnaSeqMetrics__','',colnames(METADATA))
-#https://www.tidyverse.org/articles/2019/03/tibble-2.1.1/
 
 # Get gene specific parameters from synapse
 GENE.PARAM = synGet('syn8449369', version = 2)$path %>% 
@@ -1294,17 +1294,5 @@ save(list = 'all.fit', file = '../output/MAYO/MAYO_CBE_TCX_allfits.RData')
 
 stopImplicitCluster()
 ```
-|  *Results*                                  |  *File Name*                                 |
-|  -----------------------------------------  |   ---------                                  |
-|  Covariates                                 |  MAYO_CBE_TCX_Covariates.tsv                 |
-|  Counts (raw)                               |  MAYO_CBE_TCX_Counts.tsv                     |
-|  Counts (estimated)                         |  MAYO_CBE_TCX_eCounts.tsv                    |
-|  Counts (lcpm)                              |  MAYO_CBE_TCX_logCPM.tsv                     |
-|  Offset (for gene length and gc content)    |  MAYO_CBE_TCX_offset.tsv                     |
-|  Design Matrix                              |  MAYO_CBE_TCX_Design.tsv                     |
-|  Surrogate Variables                        |  MAYO_CBE_TCX_SurVar.tsv                     |
-|  Residual Expression (for eQTL)             |  MAYO_CBE_TCX_eQTLResidualExpression.tsv     |
-|  Residual Expression (for network analysis) |  MAYO_CBE_TCX_netResidualExpression.tsv      |
-|  Differential Expression                    |  MAYO_CBE_TCX_DiffExpression.tsv             |
-|  All model fits                             |  MAYO_CBE_TCX_allfits.RData                  |
+
 

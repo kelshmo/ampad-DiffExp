@@ -5,10 +5,20 @@ editor_options:
   chunk_output_type: console
 ---
   Date of analysis update: "`r date()`"
+  
+  
+  syn8691099.1
+syn10156693.3
+syn8698270.1
+syn8449369.2
+syn6100548.7
+syn6101474.4
+  
+The [markdown](https://www.synapse.org/#!Synapse:syn8484987) produced for this publication is available on Synapse with files linked via Provenance. 
+  
 
 ```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE, cache=FALSE}
-## It is assumed your working directory is where this file
-
+##It is assumed your working directory is "~/ampad-DiffExp/gene_level_analysis"
 ## Load required libraries
 library(CovariateAnalysis) # get the package from devtools::install_github('th1vairam/CovariateAnalysis@dev')
 library(data.table)
@@ -23,11 +33,8 @@ library(RColorBrewer)
 library(cqn)
 library(glmnet)
 
-library(synapseClient)
-library(githubr) # get the package from devtools::install_github('brian-bot/githubr')
+library(synapser)
 library(knitr)
-
-synapseLogin()
 
 library(doParallel)
 library(foreach)
@@ -51,16 +58,9 @@ knitr::opts_chunk$set(
   cache = TRUE)
 ```
 
-```{r synapse.parameters, include=FALSE}
-# Synapse parameters
-parentId = 'syn8672415'
-activityName = 'Differential Expression Analysis';
-activityDescription = 'Differential expression analysis of reprocessed RNASeq from MSSM samples';
 
-# Github link
-thisFileName <- 'MSSM_geneLevel.Rmd'
-thisRepo <- getRepo(repository = "th1vairam/ampad-DiffExp", ref="branch", refName='geneLevelAnalysis')
-thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('gene_level_analysis/',thisFileName))
+```{r synLogin}
+synLogin()
 ```
 
 ### Data download
@@ -69,7 +69,7 @@ Obtain count matrix and metadata from synapse
 # Get reprocessed sample counts for temporal cortex
 COUNT_ID <- 'syn8691099';
 ALL_USED_IDs <- COUNT_ID
-COUNT <- synapseClient::synGet(COUNT_ID)@filePath %>%
+COUNT <- synapser::synGet(COUNT_ID, version = 1)$path %>%
   read.table(header=T, sep='\t', check.names = F, row.names = 1)
 
 # Convert rownames of counts from tracking id to ensemble gene id
@@ -89,7 +89,7 @@ SampleID = data.frame(SampleID = colnames(COUNT),
 # Get technical metadata
 METADATA_TECH_ID <- 'syn6100548'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_TECH_ID
-METADATA_TECH <- synapseClient::synGet(METADATA_TECH_ID)@filePath %>%
+METADATA_TECH <- synapser::synGet(METADATA_TECH_ID, version = 7)$path %>%
   read.table(sep=',',header=T, row.names=1) %>%
   group_by(sampleIdentifier) %>%
   top_n(1, -rRNA.rate) %>%
@@ -102,30 +102,32 @@ METADATA_TECH <- synapseClient::synGet(METADATA_TECH_ID)@filePath %>%
 # Get 90+ age
 METADATA_AGE_ID = 'syn10156693'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_AGE_ID
-METADATA_AGE <- synapseClient::synGet(METADATA_AGE_ID)@filePath %>%
+METADATA_AGE <- synapser::synGet(METADATA_AGE_ID, version = 3)$path %>%
   read.table(sep='\t', header=T)
 
 # Get clinical metadata
 METADATA_CLINICAL_ID <- 'syn6101474'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_CLINICAL_ID
-METADATA_CLINICAL <- synapseClient::synGet(METADATA_CLINICAL_ID)@filePath %>%
+METADATA_CLINICAL <- synapser::synGet(METADATA_CLINICAL_ID, version = 4)$path %>%
   read.csv(header = T)
 
 # Get picard metrics from synapse
 METADATA.PICARD_ID <- 'syn8698270';
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA.PICARD_ID
-METADATA.PICARD <- CovariateAnalysis::downloadFile(METADATA.PICARD_ID) %>%
+METADATA.PICARD <- synGet(METADATA.PICARD_ID, version = 1)$path %>%
+  read.table(sep='\t', header=T, stringsAsFactors=F) %>% 
   dplyr::rename(sampleIdentifier = sample)
-colnames(METADATA.PICARD) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA.PICARD))
-colnames(METADATA.PICARD) = gsub('RnaSeqMetrics__','',colnames(METADATA.PICARD))
 
 METADATA <- dplyr::full_join(METADATA_TECH, METADATA_CLINICAL) %>%
   dplyr::inner_join(METADATA.PICARD) %>%
   dplyr::select(-AOD) %>%
   dplyr::left_join(METADATA_AGE)
+colnames(METADATA) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA))
+colnames(METADATA) = gsub('RnaSeqMetrics__','',colnames(METADATA))
 
 # Get gene specific parameters from synapse
-GENE.PARAM = downloadFile('syn8449369')
+GENE.PARAM = synGet('syn8449369', version = 2)$path %>% 
+    read.table(sep='\t', header=T, stringsAsFactors=F)
 ALL_USED_IDs = c(ALL_USED_IDs, 'syn8449369')
 
 GENE.LEN = dplyr::select(GENE.PARAM, ensembl_gene_id, gene.length) %>% unique()
@@ -138,7 +140,7 @@ rownames(GENE.GC) = GENE.GC$ensembl_gene_id
 ### Data preprocessing
 ```{r preprocess.data,cache=FALSE, echo=TRUE}
 # Choose samples with rRNA rate less than 5% and more PF_READS_ALIGNED
-METADATA = METADATA %>%
+METADATA = as_tibble(METADATA, .name_repair = "unique") %>%
   plyr::ddply(.(barcode), .fun = function(x){
     x %>%
       dplyr::filter(PCT_RIBOSOMAL_BASES < 0.05) %>%
@@ -934,7 +936,7 @@ all.fit = c(all.fit, list(APOE4 = FIT))
 ### Differential expression analysis (with Tissue.Diagnosis and Sex)
 Differential expression is performed on the Tissue.Diagnosis x Sex variable by controlling for covariates identified above
 
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+Genes that are differentially expressed at an FDR <= 0.05 and fold change of 1.2 are
 ```{r diff.exp3, fig.height=15, fig.width=13}
 ## Modeling Diagnosis, msex and age_death conjointly
 COVARIATES$Tissue.Diagnosis.Sex = paste(COVARIATES$Tissue.Diagnosis,COVARIATES$Sex, sep = '.') %>% factor
@@ -1070,44 +1072,8 @@ all.diff.exp = c(all.diff.exp, list(Diagnosis.AOD = DE))
 all.fit = c(all.fit, list(Diagnosis.AOD = FIT))
 ```
 
-### Store files in synapse
+### Store files in /output directory
 ```{r synapse.store, include=FALSE, eval=TRUE, cache=FALSE}
-# Function to change entity ACL (also creates new acls if it doesn't exist)
-synChangeEntityACL <- function(id, new.racl){
-  tryCatch({ 
-    # If old acl exist update
-    old.acl = synapseClient::synGetEntityACL(id)
-    old.acl@resourceAccess = new.racl
-    synUpdateEntityACL(old.acl)
-  }, error = function(e){ 
-    # If not create a new acl
-    new.acl = AccessControlList(id = id, resourceAccess = new.racl)
-    synCreateEntityACL(new.acl)
-  })
-}
-
-# Create new resource acls
-new.racl = ResourceAccess(principalId = '3319864', 
-                          accessType = c('UPDATE', 'CHANGE_SETTINGS', 'DELETE', 'READ', 
-                                         'DOWNLOAD', 'MODERATE', 'CREATE', 'CHANGE_PERMISSIONS')) %>%
-  ResourceAccessList() %>%
-  synapseClient::append(ResourceAccess(principalId = '274008', 
-                                       accessType = c('UPDATE', 'CHANGE_SETTINGS', 'DELETE', 'READ', 
-                                                      'DOWNLOAD', 'MODERATE', 'CREATE', 'CHANGE_PERMISSIONS'))) %>%
-  synapseClient::append(ResourceAccess(principalId = '273995', 
-                                       accessType = c('UPDATE', 'CHANGE_SETTINGS', 'DELETE', 'READ', 
-                                                      'DOWNLOAD', 'MODERATE', 'CREATE', 'CHANGE_PERMISSIONS'))) %>%
-  synapseClient::append(ResourceAccess(principalId = '3359054', 
-                                       accessType = c('READ', 'DOWNLOAD')))
-
-# Set annotations
-all.annotations = annotations(synapseClient::synGet(COUNT_ID))
-
-# Code
-CODE <- Folder(name = "MSSM Reprocessed RNASeq (Normalised)", parentId = parentId)
-CODE <- synStore(CODE)
-synChangeEntityACL(CODE@properties$id, new.racl)
-
 # Store covariates
 COVARIATES = rownameToFirstColumn(COVARIATES, 'SampleID')
 write.table(COVARIATES, file = 'MSSM_FP_STG_PHG_IFG_Covariates.tsv', sep = '\t', row.names=F, quote=F)
@@ -1220,28 +1186,5 @@ synChangeEntityACL(FIT_OBJ@properties$id, new.racl)
 
 # Delete folder acl
 synDeleteEntityACL(CODE@properties$id)
-```
-|  *Results*                                  |  *SynapseID*                     |
-|  -----------------------------------------  |   ---------                      |
-|  Covariates                                 |  `r COV_OBJ$properties$id`       |
-|  Counts (raw)                               |  `r COUNT_OBJ$properties$id`     |
-|  Counts (estimated)                         |  `r ECOUNT_OBJ$properties$id`    |
-|  Counts (lcpm)                              |  `r LCOUNT_OBJ$properties$id`    |
-|  Offset (for gene length and gc content)    |  `r OFFSET_OBJ$properties$id`    |
-|  Design Matrix                              |  `r DM_OBJ$properties$id`        |
-|  Surrogate Variables                        |  `r SURR_OBJ$properties$id`      |
-|  Residual Expression (for eQTL)             |  `r eEXP_OBJ$properties$id`      |
-|  Residual Expression (for network analysis) |  `r nEXP_OBJ$properties$id`      |
-|  Differential Expression                    |  `r DEXP_OBJ$properties$id`      |
-```{r knit2syn, eval=FALSE}
-library(synapseClient)
-library(knit2synapse) # get the package from devtools::install_github('Sage-Bionetworks/knit2synapse')
-
-synapseClient::synapseLogin()
-
-knit2synapse::knitToFolderEntity(file = "./MSSM_geneLevel.Rmd",
-                                 parentId = "syn8672415",
-                                 entityName = 'MSSM Reprocessed RNASeq (Normalised)')
-
 ```
 

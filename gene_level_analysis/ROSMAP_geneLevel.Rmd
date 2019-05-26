@@ -6,6 +6,15 @@ editor_options:
 ---
 Date of analysis update: "`r date()`"
 
+syn3382527.7
+syn4300313.1
+syn8449369.2
+syn7116000.1
+syn8691134.1
+syn3191087.3
+syn8698240.2
+
+
 ### Load Libraries
 ```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
 ## It is assumed your working directory is where this file
@@ -23,11 +32,8 @@ library(biomaRt)
 library(RColorBrewer)
 library(cqn)
 
-library(synapseClient)
-library(githubr) # get the package from devtools::install_github('brian-bot/githubr')
+library(synapser)
 library(knitr)
-
-synapseLogin()
 
 library(doParallel)
 library(foreach)
@@ -46,16 +52,9 @@ knitr::opts_chunk$set(
   cache = TRUE)
 ```
 
-```{r synapse.parameters, include=FALSE}
-# Synapse parameters
-parentId = 'syn8672910';
-activityName = 'Differential Expression Analysis';
-activityDescription = 'Differential expression analysis of reprocessed RNASeq from ROSMAP samples';
 
-# Github link
-thisFileName <- 'ROSMAP_geneLevel.Rmd'
-thisRepo <- getRepo(repository = "th1vairam/ampad-DiffExp", ref="branch", refName='geneLevelAnalysis')
-thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('gene_level_analysis/',thisFileName))
+```{r synLogin}
+synLogin()
 ```
 
 ### Data download
@@ -64,8 +63,8 @@ Obtain count matrix and metadata from synapse
 # Download expression data
 COUNT_ID <- 'syn8691134';
 ALL_USED_IDs <- COUNT_ID
-COUNT_OBJ <- synGet(COUNT_ID)
-COUNT <- read.table(COUNT_OBJ@filePath, header=T, sep='\t', check.names = F, row.names = 1)
+COUNT_OBJ <- synGet(COUNT_ID, version = 1)
+COUNT <- read.table(COUNT_OBJ$path, header=T, sep='\t', check.names = F, row.names = 1)
 COUNT[,grep('150_120419', colnames(COUNT))[2]] = NULL
 
 # Convert rownames of counts from tracking id to ensemble gene id
@@ -78,34 +77,32 @@ rownames(COUNT) = tmp[rownames(COUNT), 'ensembl_gene_id']
 # Get clinical metadata
 METADATA.CLINICAL_ID <- 'syn3191087'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA.CLINICAL_ID
-METADATA.CLINICAL_OBJ <- synGet(METADATA.CLINICAL_ID)
-METADATA.CLINICAL <- read.table(METADATA.CLINICAL_OBJ@filePath,sep=',',header=T)
+METADATA.CLINICAL_OBJ <- synGet(METADATA.CLINICAL_ID, version = 3)
+METADATA.CLINICAL <- read.table(METADATA.CLINICAL_OBJ$path,sep=',',header=T)
 
 # Get clinical metadata with uncensored ages
 METADATA.CLINICAL_ID1 <- 'syn7116000'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA.CLINICAL_ID1
-METADATA.CLINICAL_OBJ1 <- synGet(METADATA.CLINICAL_ID1)
-METADATA.CLINICAL1 <- read.table(METADATA.CLINICAL_OBJ1@filePath,sep=',',header=T)
+METADATA.CLINICAL_OBJ1 <- synGet(METADATA.CLINICAL_ID1, version = 1)
+METADATA.CLINICAL1 <- read.table(METADATA.CLINICAL_OBJ1$path,sep=',',header=T)
 
 # Get technical covariates
 METADATA.TECH_ID <- 'syn4300313'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA.TECH_ID
-METADATA.TECH_OBJ <- synGet(METADATA.TECH_ID)
-METADATA.TECH <- read.table(METADATA.TECH_OBJ@filePath,sep='\t',header=T)
+METADATA.TECH_OBJ <- synGet(METADATA.TECH_ID, version = 1)
+METADATA.TECH <- read.table(METADATA.TECH_OBJ$path,sep='\t',header=T)
 
 # Get picard metrics from synapse
 METADATA.PICARD_ID <- 'syn8698240';
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA.PICARD_ID
-METADATA.PICARD <- synGet(METADATA.PICARD_ID)@filePath %>%
+METADATA.PICARD <- synGet(METADATA.PICARD_ID, version = 2)$path %>%
   data.table::fread() %>%
   dplyr::rename(Sampleid = sample)
-colnames(METADATA.PICARD) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA.PICARD))
-colnames(METADATA.PICARD) = gsub('RnaSeqMetrics__','',colnames(METADATA.PICARD))
 
 # Fix error in technical covariates data
 KEY_ID <- 'syn3382527'
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = KEY_ID  
-KEY <- synGet(KEY_ID)@filePath %>%
+KEY <- synGet(KEY_ID, version = 7)$path %>%
   read.csv %>% 
   dplyr::filter(!is.na(rnaseq_id)) %>%
   dplyr::select(projid, rnaseq_id) %>%
@@ -128,8 +125,11 @@ METADATA <- METADATA %>%
   dplyr::group_by(Sampleid) %>%
   dplyr::top_n(1, RINcontinuous)
 
+colnames(METADATA) = gsub('AlignmentSummaryMetrics__','',colnames(METADATA))
+colnames(METADATA) = gsub('RnaSeqMetrics__','',colnames(METADATA))
+
 # Get gene specific parameters from synapse
-GENE.PARAM = synGet('syn8449369')@filePath %>%
+GENE.PARAM = synGet('syn8449369', version = 2)$path %>%
   data.table::fread(data.table = FALSE)
 ALL_USED_IDs = c(ALL_USED_IDs, 'syn8449369')
 
