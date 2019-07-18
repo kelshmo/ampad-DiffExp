@@ -8,10 +8,10 @@ editor_options:
 ---
 
 ```{r knit2synapse, eval=FALSE}
-library(synapseClient)
+library(synapser)
 library(knit2synapse) # get the package from devtools::install_github('Sage-Bionetworks/knit2synapse')
 
-synapseClient::synapseLogin()
+synapser::synLogin()
 
 knit2synapse::knitToFolderEntity(file = "metaAnalysisForDiffExp.Rmd",
                                  parentId = "syn8672415",
@@ -66,22 +66,25 @@ thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('gene_level
 ### Get study specific covariates and adjusted expression from synapse
 
 ```{r get.exp}
-# Function to read tsv/csv files from synapse
-downloadFile <- function(id){ 
-  fread(synapseClient::synGet(id)@filePath, data.table = F)
-}
-
 # Read covariates
+# covar.ids = tibble(study = c("ROSMAP", "MSSM", "MAYO"), 
+#                    synid = c("syn8456631", "syn8484996", "syn8466814"), 
+#                    version = c("27", "20", "20"))
+# covar.md =  covar.ids %>%
+#   dplyr::mutate(data = map2(synid, version, 
+#                             ~ readr::read_tsv(synGet(.x, version = .y)$path, col_types = cols(.default = "c"))))
+# covar = unnest(covar.md, data) 
+# Read adjusted expression
+
 covar.ids = c(ROSMAP = 'syn8456631', MSSM = 'syn8484996', MAYO = 'syn8466814')
 all.used.ids = as.character(covar.ids)
 covar =  covar.ids %>%
-  lapply(downloadFile)
+  lapply(function(x) readr::read_csv(synGet(x)$path, col_types = cols(.default = "c")))
 
-# Read adjusted expression
 expr.ids = c(ROSMAP = 'syn8456719', MSSM = 'syn8485027', MAYO = 'syn8466826')
 all.used.ids = c(all.used.ids, as.character(expr.ids))
 expr =  expr.ids %>%
-  lapply(downloadFile) %>%
+  lapply(function(x) readr::read_tsv(synGet(x)$path, col_types = cols(.default = "c")))
   plyr::join_all(type = 'inner')
 ```
 
