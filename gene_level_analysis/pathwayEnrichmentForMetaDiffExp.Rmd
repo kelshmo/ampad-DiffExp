@@ -7,10 +7,10 @@ editor_options:
   chunk_output_type: console
 ---
 ```{r knit2synapse, eval=FALSE}
-library(synapseClient)
+library(synapser)
 library(knit2synapse) # get the package from devtools::install_github('Sage-Bionetworks/knit2synapse')
 
-synapseClient::synapseLogin()
+synapser::synLogin()
 
 knit2synapse::knitToFolderEntity(file = "pathwayEnrichmentForMetaDiffExp.Rmd",
                                  parentId = "syn8672415",
@@ -21,17 +21,17 @@ knit2synapse::knitToFolderEntity(file = "pathwayEnrichmentForMetaDiffExp.Rmd",
 ## It is assumed your working directory is where this file
 
 ## Load required libraries
-library(CovariateAnalysis) # get the package from devtools::install_github('th1vairam/CovariateAnalysis@dev')
+library(CovariateAnalysis) # get the package from devtools::install_github('th1vairam/CovariateAnalysis$dev')
 library(data.table)
 library(plyr)
 library(tidyverse)
 library(biomaRt)
 
-library(synapseClient)
+library(synapser)
 library(knitr)
 library(githubr) # get the package from devtools::install_github('brian-bot/githubr')
 
-synapseClient::synapseLogin()
+synapser::synLogin()
 
 library(doParallel)
 library(foreach)
@@ -66,9 +66,9 @@ thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('gene_level
 ### Get meta-differential expression genesets
 ```{r get.diffExp}
 # Load meta-differential expression genesets
-load(synGet('syn11914811')@filePath)
+load(synGet('syn11914811')$path)
 all.used.ids = c('syn11914811', 'syn11914808')
-bck.genes = fread(synGet('syn11914808')@filePath, data.table = T) %>%
+bck.genes = fread(synGet('syn11914808')$path, data.table = T) %>%
   dplyr::select(ensembl_gene_id)
   
 ## Define biomart object
@@ -96,7 +96,7 @@ all.gs = lapply(all.gs, function(x){
 ### Get all gene sets
 ```{r get.gs, cache = FALSE}
 # Get enrichr gene sets from synapse
-load(synapseClient::synGet('syn4867851')@filePath)
+load(synapseClient::synGet('syn4867851')$path)
 all.used.ids = c('syn4867851', all.used.ids)
 # 'Chromosome_Location', 'Cross_Species_Phenotype', 'Disease_Signatures_from_GEO_down', 'Disease_Signatures_from_GEO_up',
 # 'ENCODE_TF_ChIP-seq','Mouse_Gene_Atlas', 'OMIM_Disease', 'OMIM_Expanded', 'TargetScan_microRNA',
@@ -115,7 +115,7 @@ gs$HypothesisFree = do.call(c, GeneSets) %>%
       sapply(function(x){ x[[1]] })
   })
 
-tmp = synapseClient::synTableQuery('select * from syn11707052')@values
+tmp = synapseClient::synTableQuery('select * from syn11707052')$values
 all.used.ids = c(all.used.ids, 'syn11707052')
 
 gs$CellType = tmp %>%
