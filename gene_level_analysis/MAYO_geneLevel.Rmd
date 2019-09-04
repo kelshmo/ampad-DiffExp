@@ -1,4 +1,4 @@
----
+ ---
 title: Covariate and differential expression analysis of MAYO reprocessed counts
 output: html_notebook
 ---
@@ -979,6 +979,12 @@ p
 
 all.diff.exp = c(all.diff.exp, list(Diagnosis = DE))
 all.fit = c(all.fit, list(Diagnosis = FIT))
+
+#Added to track all sig Genes - JKG
+ADCntrl = list( Up = list( CBE = CBE_UP_AD_Cntrl, TCX = TCX_UP_AD_Cntrl), 
+                Down = list( CBE = CBE_Down_AD_Cntrl, TCX = TCX_Down_AD_Cntrl)
+              )
+
 ```
 
 ### Associate differential expression results with gc content, gene length and average expression
@@ -1089,6 +1095,20 @@ p
 
 all.diff.exp = c(all.diff.exp, list(APOE4 = DE))
 all.fit = c(all.fit, list(APOE4 = FIT))
+
+#Added to track all sig Genes - JKG
+foo <- DE[ DE$Comparison == 'APOE42-APOE40', ]
+table(foo$Tissue.ag, foo$Direction)
+CBE_UP_APOE <- foo[ foo$Tissue.ref == 'CBE' & foo$Direction == 'UP', ]$ensembl_gene_id
+CBE_Down_APOE <- foo[ foo$Tissue.ref == 'CBE' & foo$Direction == 'DOWN', ]$ensembl_gene_id
+TCX_UP_AD_APOE <- foo[ foo$Tissue.ref == 'TCX' & foo$Direction == 'UP', ]$ensembl_gene_id
+TCX_Down_APOE <- foo[ foo$Tissue.ref == 'TCX' & foo$Direction == 'DOWN', ]$ensembl_gene_id
+
+
+APOE42_40 = list( Up = list( CBE = CBE_UP_APOE, TCX = TCX_UP_AD_APOE), 
+                Down = list( CBE = CBE_Down_APOE, TCX = TCX_Down_APOE)
+              )
+
 ```
 
 ### Differential expression analysis (with Tissue.Diagnosis x Sex as primary variable)
@@ -1164,6 +1184,24 @@ p
 
 all.diff.exp = c(all.diff.exp, list(Diagnosis.Sex = DE))
 all.fit = c(all.fit, list(Diagnosis.Sex = FIT))
+
+#Added to track all sig Genes - JKG
+foo <- DE[ DE$Comparison == 'AD-CONTROL', ]
+table(foo$Tissue.ag, foo$Direction)
+CBE_UP_Male <- foo[ foo$Tissue.ref == 'CBE' & foo$Sex.ref =='MALE' & foo$Direction == 'UP', ]$ensembl_gene_id
+CBE_Down_Male <- foo[ foo$Tissue.ref == 'CBE' & foo$Sex.ref =='MALE' & foo$Direction == 'DOWN', ]$ensembl_gene_id
+CBE_UP_Female <- foo[ foo$Tissue.ref == 'CBE' & foo$Sex.ref =='FEMALE' & foo$Direction == 'UP', ]$ensembl_gene_id
+CBE_Down_Female <- foo[ foo$Tissue.ref == 'CBE' & foo$Sex.ref =='FEMALE' & foo$Direction == 'DOWN', ]$ensembl_gene_id
+
+TCX_UP_Male <- foo[ foo$Tissue.ref == 'TCX' & foo$Sex.ref =='MALE' & foo$Direction == 'UP', ]$ensembl_gene_id
+TCX_Down_Male <- foo[ foo$Tissue.ref == 'TCX' & foo$Sex.ref =='MALE' & foo$Direction == 'DOWN', ]$ensembl_gene_id
+TCX_UP_Female <- foo[ foo$Tissue.ref == 'TCX' & foo$Sex.ref =='FEMALE' & foo$Direction == 'UP', ]$ensembl_gene_id
+TCX_Down_Female <- foo[ foo$Tissue.ref == 'TCX' & foo$Sex.ref =='FEMALE' & foo$Direction == 'DOWN', ]$ensembl_gene_id
+
+Sex = list( Up = list( Female = list( CBE = CBE_UP_Female, TCX = TCX_UP_Female), Male = list( CBE = CBE_UP_Male, TCX = TCX_Down_Male)), 
+                Down = list( Female = list( CBE = CBE_Down_Female, TCX = TCX_Down_Female), Male = list( CBE = CBE_Down_Male, TCX = TCX_Down_Male))
+          )
+Comp = list( ADCntrl = ADCntrl, APOE42_40 = APOE42_40, Sex = Sex )
 ```
 
 ### Differential expression analysis (with Tissue.Diagnosis x AgeAtDeath as primary variable)
@@ -1291,6 +1329,10 @@ rbindlist(all.diff.exp, use.names = T, fill = T, idcol = 'Model') %>%
 
 # Store all model fits
 save(list = 'all.fit', file = '../output/MAYO/MAYO_CBE_TCX_allfits.RData')
+
+save( file = '../output/MAYO/MAYO_DiffExpression_ENSGs.RDat')
+file <- File(path = '../output/MAYO/MAYO_DiffExpression_ENSGs.RDat', parent = 'syn8466812')
+file <- synStore(file)
 
 stopImplicitCluster()
 ```
